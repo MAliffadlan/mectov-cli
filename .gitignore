@@ -1,0 +1,4 @@
+.local-experiment/
+node_modules/
+.DS_Store
+.codex
