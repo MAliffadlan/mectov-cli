@@ -39,6 +39,35 @@ For scripted runs, you can auto-approve confirmations:
 - stores per-agent memory under `.local-experiment/agents/`
 - gives you safe local commands for browsing, reading, searching, diffing, restoring, editing, and running shell commands with confirmation
 
+## Cara paling gampang
+
+Begitu `mectov` kebuka, kamu tidak perlu hafal command teknis dulu. Cukup ketik kalimat biasa seperti:
+
+- `jelasin folder ini`
+- `jelasin scripts/local-experiment-cli.mjs`
+- `buka README.md`
+- `cari "agent" di src/tools`
+- `cek perubahan project ini`
+- `review scripts/local-experiment-cli.mjs`
+- `lihat isi src/tools/AgentTool`
+- `ganti "foo" jadi "bar" di app.ts`
+
+Kalau butuh panduan singkat di dalam CLI, ketik:
+
+- `menu`
+- `panduan`
+- `contoh`
+
+Untuk edit file atau menjalankan shell command, gunakan mode:
+
+- `mectov --preset research-local`
+
+Gaya bawaan Mectov sekarang memang dibuat seperti teman ngulik project lokal, bukan command shell yang kaku:
+
+- mode `safe-local` tampil sebagai prompt `mectov:lihat>`
+- mode `research-local` tampil sebagai prompt `mectov:ngulik>`
+- saat Mectov paham kalimatmu, dia akan kasih tahu interpretasinya dengan bahasa yang ringan
+
 ## Commands
 
 - `help`
@@ -49,6 +78,10 @@ For scripted runs, you can auto-approve confirmations:
 - `agent-memory <name> [lines]`
 - `mode`
 - `status`
+- `explain [path]`
+- `inspect [path]`
+- `changes [path]`
+- `review [path]`
 - `plan <request>`
 - `ask <request>`
 - `think <request>`
@@ -58,12 +91,16 @@ For scripted runs, you can auto-approve confirmations:
 - `recap [lines]`
 - `pwd`
 - `summary [path]`
+- `explain [path]`
+- `inspect [path]`
 - `ls [path]`
 - `tree [path] [depth]`
 - `read <file> [start] [end]`
 - `find <text> [path]`
 - `grep <text> [path]`
+- `changes [path]`
 - `diff <file>`
+- `review [path]`
 - `restore <file>`
 - `patch <file> <old> <new>`
 - `patch-block <file> <old> <new>`
@@ -77,6 +114,25 @@ For scripted runs, you can auto-approve confirmations:
 - `quit`
 
 Commands also accept a slash prefix, so `/read README.md 1 20` works too.
+
+Mectov now also understands several plain-language inputs directly. For example:
+
+- `buka README.md` -> `read README.md`
+- `jelasin folder ini` -> `summary .`
+- `jelasin scripts/local-experiment-cli.mjs` -> `explain scripts/local-experiment-cli.mjs`
+- `cari "TODO" di src` -> `grep "TODO" src`
+- `cek perubahan project ini` -> `changes .`
+- `review src/tools` -> `review src/tools`
+- `inspect src/tools/AgentTool` -> `inspect src/tools/AgentTool`
+- `lihat isi src/tools` -> `ls src/tools`
+- `ganti "foo" jadi "bar" di app.ts` -> `patch app.ts "foo" "bar"`
+
+Command baru yang paling berguna:
+
+- `explain`: jawaban ringkas tentang file/folder, gabungan struktur, konteks git, dan hotspot cepat
+- `inspect`: bedah cepat file/folder, termasuk metadata, struktur, dan marker penting
+- `changes`: lihat status git, file yang berubah, dan diff stat area tertentu
+- `review`: review cepat berbasis marker risiko seperti `TODO`, `debugger`, `process.env`, `exec/spawn`, dan mutasi filesystem
 
 `ask` will auto-run the selected action when it resolves to a read-only tool with a confident command. Low-confidence workflows will not auto-run through `ask`. For write or shell actions, it prints the routing result and leaves execution to you.
 
@@ -121,6 +177,7 @@ Example anchor patch:
 - `generalist`: balanced default behavior
 - `explorer`: favors structure and symbol tracing
 - `reviewer`: favors evidence gathering and issue-oriented inspection
+- `maintainer`: favors workspace changes, inspect, and review flows
 - `editor`: favors file changes plus post-edit verification
 - `statusline-helper`: biases toward prompt and statusline related searches
 

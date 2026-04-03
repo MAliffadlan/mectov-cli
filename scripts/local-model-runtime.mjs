@@ -5,12 +5,16 @@ import { buildLocalWorkflow } from './local-model-adapter.mjs';
 
 const READ_ONLY_COMMANDS = new Set([
   'summary',
+  'explain',
+  'inspect',
   'ls',
   'tree',
   'read',
   'find',
   'grep',
+  'changes',
   'diff',
+  'review',
   'history',
   'memory',
   'status',

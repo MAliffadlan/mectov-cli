@@ -45,6 +45,11 @@ export const LOCAL_AGENTS = {
     description: 'Looks for risks, changed behavior, and evidence in files.',
     style: 'Prefers diff, read, and issue-oriented search.',
   },
+  maintainer: {
+    name: 'maintainer',
+    description: 'Focuses on workspace changes, quick inspection, and practical cleanup work.',
+    style: 'Prefers changes, inspect, and review before editing.',
+  },
   editor: {
     name: 'editor',
     description: 'Focuses on file changes with verification after each mutation.',
@@ -102,6 +107,23 @@ export function applyAgentProfile(agentName, workflow) {
           });
         }
       }
+      break;
+    case 'maintainer':
+      nextWorkflow.notes.unshift(
+        'Maintainer agent focuses on current workspace changes, quick inspection, and practical follow-up actions.',
+      );
+      appendUniqueStep(nextWorkflow.steps, {
+        goal: 'Check the current git change set around this area.',
+        command: `changes ${focusPath}`,
+        readOnly: true,
+        enabled: true,
+      });
+      appendUniqueStep(nextWorkflow.steps, {
+        goal: 'Run a quick review on the same area.',
+        command: `review ${focusPath}`,
+        readOnly: true,
+        enabled: true,
+      });
       break;
     case 'editor':
       nextWorkflow.notes.unshift(

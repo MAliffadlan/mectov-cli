@@ -21,6 +21,11 @@ function extractPathCandidates(request) {
 
   const stopWords = new Set([
     'show',
+    'inspect',
+    'review',
+    'audit',
+    'analyze',
+    'analyse',
     'read',
     'open',
     'find',
@@ -183,6 +188,22 @@ export function createLocalToolRegistry({ presetName, activePreset }) {
       examples: ['read README.md 1 40'],
     },
     {
+      name: 'explain',
+      category: 'inspect',
+      safety: 'read-only',
+      enabled: true,
+      description: 'Explain a file or folder in a concise, human-readable summary.',
+      examples: ['explain src/tools/AgentTool'],
+    },
+    {
+      name: 'inspect',
+      category: 'inspect',
+      safety: 'read-only',
+      enabled: true,
+      description: 'Inspect a file or folder with richer metadata and risk signals.',
+      examples: ['inspect src/tools.ts'],
+    },
+    {
       name: 'find',
       category: 'search',
       safety: 'read-only',
@@ -199,12 +220,28 @@ export function createLocalToolRegistry({ presetName, activePreset }) {
       examples: ['grep "AgentTool" src'],
     },
     {
+      name: 'changes',
+      category: 'change-review',
+      safety: 'read-only',
+      enabled: true,
+      description: 'Show git working tree changes for a path or workspace.',
+      examples: ['changes .'],
+    },
+    {
       name: 'diff',
       category: 'change-review',
       safety: 'read-only',
       enabled: true,
       description: 'Compare a file with its latest automatic backup.',
       examples: ['diff demo.txt'],
+    },
+    {
+      name: 'review',
+      category: 'change-review',
+      safety: 'read-only',
+      enabled: true,
+      description: 'Run a lightweight risk review on a file or area.',
+      examples: ['review src/tools/AgentTool'],
     },
     {
       name: 'restore',
@@ -311,6 +348,30 @@ export function planLocalTask(request, registry) {
   const candidates = [];
 
   const summaryTool = toolsByName.get('summary');
+  const explainTool = toolsByName.get('explain');
+  if (/(explain|jelaskan|jelasin|describe|what is this|what does this do)/i.test(normalized)) {
+    candidates.push(
+      createCandidate(
+        explainTool,
+        10,
+        'Request asks for a human-readable explanation of a file or folder.',
+        buildCommand('explain', [primaryPath ?? '.']),
+      ),
+    );
+  }
+
+  const inspectTool = toolsByName.get('inspect');
+  if (/(inspect|analyze|analyse|profile|detail|details|bedah)/i.test(normalized)) {
+    candidates.push(
+      createCandidate(
+        inspectTool,
+        9,
+        'Request asks for a deeper inspection of a file or folder.',
+        buildCommand('inspect', [primaryPath ?? '.']),
+      ),
+    );
+  }
+
   if (/(summary|summarize|overview|stats|breakdown|count)/i.test(normalized)) {
     candidates.push(
       createCandidate(
@@ -399,6 +460,18 @@ export function planLocalTask(request, registry) {
   }
 
   const diffTool = toolsByName.get('diff');
+  const changesTool = toolsByName.get('changes');
+  if (/(changes|changed files|what changed|git status|working tree|staged|unstaged|untracked|perubahan)/i.test(normalized)) {
+    candidates.push(
+      createCandidate(
+        changesTool,
+        9,
+        'Request asks about git working tree changes.',
+        buildCommand('changes', [primaryPath ?? '.']),
+      ),
+    );
+  }
+
   if (/(diff|compare|changes|changed since backup)/i.test(normalized) && primaryPath) {
     candidates.push(
       createCandidate(
@@ -406,6 +479,18 @@ export function planLocalTask(request, registry) {
         8,
         'Request asks to compare a file with its backup.',
         buildCommand('diff', [primaryPath]),
+      ),
+    );
+  }
+
+  const reviewTool = toolsByName.get('review');
+  if (/(review|audit|risk|risks|bug hunt|scan issues|check issues|cek risiko)/i.test(normalized)) {
+    candidates.push(
+      createCandidate(
+        reviewTool,
+        9,
+        'Request asks for a lightweight risk review.',
+        buildCommand('review', [primaryPath ?? '.']),
       ),
     );
   }

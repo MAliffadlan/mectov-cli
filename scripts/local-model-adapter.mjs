@@ -299,6 +299,88 @@ function buildDiffWorkflow(targetPath) {
   };
 }
 
+function buildInspectWorkflow(targetPath, symbol) {
+  const steps = [
+    createStep('Inspect the requested target in more detail.', buildCommand('inspect', [targetPath])),
+  ];
+
+  if (symbol) {
+    steps.push(
+      createStep(
+        'Search for the key symbol or phrase nearby.',
+        buildCommand('grep', [symbol, targetPath]),
+      ),
+    );
+  }
+
+  if (targetPath !== '.' && !/\.[A-Za-z0-9_-]+$/.test(targetPath)) {
+    steps.push(
+      createStep('Show a shallow tree for orientation.', buildCommand('tree', [targetPath, '2'])),
+    );
+  }
+
+  return {
+    intent: 'inspect',
+    summary: 'Deeper inspection of the requested file or folder.',
+    steps,
+    notes: ['Inspection stays read-only and is designed to surface useful structure quickly.'],
+  };
+}
+
+function buildExplainWorkflow(targetPath) {
+  const steps = [createStep('Explain the requested target in plain language.', buildCommand('explain', [targetPath]))];
+
+  if (targetPath !== '.' && !/\.[A-Za-z0-9_-]+$/.test(targetPath)) {
+    steps.push(
+      createStep('Show a shallow tree for the same area.', buildCommand('tree', [targetPath, '2'])),
+    );
+  }
+
+  return {
+    intent: 'explain',
+    summary: 'Generate a concise explanation of the requested file or folder.',
+    steps,
+    notes: ['Explanation is read-only and combines structure, git context, and quick review hotspots.'],
+  };
+}
+
+function buildChangesWorkflow(targetPath) {
+  const steps = [createStep('Show the git working tree changes.', buildCommand('changes', [targetPath]))];
+  if (targetPath !== '.') {
+    steps.push(
+      createStep('Run a quick review on the same target.', buildCommand('review', [targetPath])),
+    );
+  }
+
+  return {
+    intent: 'changes',
+    summary: 'Summarize git changes around the requested area.',
+    steps,
+    notes: ['Changes view is read-only and depends on the workspace being inside a git repository.'],
+  };
+}
+
+function buildReviewWorkflow(targetPath) {
+  const steps = [];
+  if (targetPath === '.') {
+    steps.push(createStep('Check the current git change set first.', buildCommand('changes', ['.'])));
+  } else {
+    steps.push(
+      createStep('Inspect the target before reviewing it.', buildCommand('inspect', [targetPath])),
+    );
+  }
+  steps.push(
+    createStep('Run a lightweight risk review.', buildCommand('review', [targetPath])),
+  );
+
+  return {
+    intent: 'review',
+    summary: 'Quick review flow focused on risks, markers, and local changes.',
+    steps,
+    notes: ['Review is heuristic and meant to highlight likely hotspots quickly.'],
+  };
+}
+
 function buildFallbackWorkflow(targetPath) {
   return {
     intent: 'fallback',
@@ -569,6 +651,14 @@ export function buildLocalWorkflow(request, registry) {
     workflow = buildWriteWorkflow(fileTarget, writeText);
   } else if (/(run|execute|launch|start|test|build)/i.test(normalized)) {
     workflow = buildRunWorkflow(runText);
+  } else if (/(explain|describe|what is this|what does this do)/i.test(normalized)) {
+    workflow = buildExplainWorkflow(targetPath);
+  } else if (/(review|audit|risk|risks|bug hunt|scan issues|check issues)/i.test(normalized)) {
+    workflow = buildReviewWorkflow(targetPath);
+  } else if (/(git status|working tree|staged|unstaged|untracked|what changed|changes in repo|changes in project|changes in workspace)/i.test(normalized)) {
+    workflow = buildChangesWorkflow(targetPath);
+  } else if (/(inspect|analyze|analyse|profile|detail|details)/i.test(normalized)) {
+    workflow = buildInspectWorkflow(targetPath, symbol);
   } else if (/(diff|compare|changes?)/i.test(normalized) && targetPath !== '.') {
     workflow = buildDiffWorkflow(targetPath);
   } else if (

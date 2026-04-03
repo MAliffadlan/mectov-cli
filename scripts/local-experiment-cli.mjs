@@ -36,6 +36,101 @@ const PRESETS = {
   },
 };
 const SKIPPED_DIR_NAMES = new Set(['.git', '.local-experiment', 'node_modules']);
+const QUICK_START_EXAMPLES = [
+  'jelasin folder ini',
+  'buka README.md',
+  'cari "agent" di src/tools',
+  'cek perubahan project ini',
+  'review scripts/local-experiment-cli.mjs',
+  'lihat isi src/tools/AgentTool',
+  'ganti "foo" jadi "bar" di app.ts',
+];
+const PRESET_PERSONAS = {
+  'safe-local': 'lihat',
+  'research-local': 'ngulik',
+};
+const TEXT_FILE_EXTENSIONS = new Set([
+  '.c',
+  '.cc',
+  '.cpp',
+  '.css',
+  '.env',
+  '.go',
+  '.graphql',
+  '.h',
+  '.hpp',
+  '.html',
+  '.java',
+  '.js',
+  '.json',
+  '.jsx',
+  '.mjs',
+  '.md',
+  '.py',
+  '.rb',
+  '.rs',
+  '.scss',
+  '.sh',
+  '.sql',
+  '.svg',
+  '.toml',
+  '.ts',
+  '.tsx',
+  '.txt',
+  '.xml',
+  '.yaml',
+  '.yml',
+]);
+const REVIEW_RULES = [
+  {
+    key: 'debugger',
+    label: 'debugger statements',
+    severity: 'high',
+    regex: /^\s*debugger\s*;?\s*$/,
+  },
+  {
+    key: 'dynamic-code',
+    label: 'dynamic code execution',
+    severity: 'high',
+    regex: /\b(eval\s*\(|new Function\s*\()/,
+  },
+  {
+    key: 'child-process',
+    label: 'child process execution',
+    severity: 'high',
+    regex: /(^|[^\w.])(execSync|execFileSync|spawnSync|execFile|spawn)\s*\(/,
+  },
+  {
+    key: 'shell-true',
+    label: 'shell:true usage',
+    severity: 'high',
+    regex: /shell\s*:\s*true/,
+  },
+  {
+    key: 'destructive-fs',
+    label: 'filesystem mutation calls',
+    severity: 'medium',
+    regex: /\b(rmSync|rm|unlinkSync|unlink|rmdirSync|writeFileSync|writeFile|appendFileSync|appendFile|renameSync|rename|copyFileSync|copyFile)\s*\(/,
+  },
+  {
+    key: 'todo',
+    label: 'TODO/FIXME/HACK markers',
+    severity: 'medium',
+    regex: /\b(TODO|FIXME|HACK|XXX)\b/,
+  },
+  {
+    key: 'console',
+    label: 'console logging',
+    severity: 'low',
+    regex: /console\.(log|debug|warn)\s*\(/,
+  },
+  {
+    key: 'env',
+    label: 'process.env access',
+    severity: 'low',
+    regex: /process\.env(?:\.[A-Za-z0-9_]+|\[['"][A-Za-z0-9_]+['"]\])?/,
+  },
+];
 
 function getFlagValue(flag, fallback) {
   const flagIndex = args.indexOf(flag);
@@ -217,16 +312,41 @@ function buildStatusSummary() {
   ].join(' | ');
 }
 
+function getPromptPersona() {
+  return PRESET_PERSONAS[presetName] ?? 'siap';
+}
+
+function getSeverityRank(severity) {
+  switch (severity) {
+    case 'high':
+      return 3;
+    case 'medium':
+      return 2;
+    case 'low':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 function buildPrompt() {
-  return `mectov[${buildStatusSummary()}]> `;
+  const alert = SESSION_STATE.errorCount > 0 ? '!' : '';
+  return `mectov:${getPromptPersona()}${alert}> `;
+}
+
+function printQuickStartExamples() {
+  QUICK_START_EXAMPLES.forEach(example => console.log(`- ${example}`));
 }
 
 function printHeader() {
   console.log('Mectov CLI');
-  console.log(`${ACTIVE_PRESET.label} | tools ${enabledToolCount()}/${TOOL_REGISTRY.tools.length} enabled | adapter ${formatModelAdapterLabel(MODEL_ADAPTER)} | auto-approve ${AUTO_APPROVE ? 'on' : 'off'}`);
+  console.log('Teman lokal buat baca, cari, dan ngoprek project.');
+  console.log(`${ACTIVE_PRESET.label} | mode ${getPromptPersona()} | tools ${enabledToolCount()}/${TOOL_REGISTRY.tools.length} aktif | adapter ${formatModelAdapterLabel(MODEL_ADAPTER)}`);
   console.log(`Workspace root: ${ROOT_DIR}`);
-  console.log(`Session log: ${SESSION_LOG}`);
-  console.log('Quick start: help, tools, adapter, status, recap, agents');
+  console.log(`Catatan sesi: ${SESSION_LOG}`);
+  console.log('Ketik biasa aja. Contoh:');
+  printQuickStartExamples();
+  console.log('Butuh panduan singkat? ketik: menu');
 }
 
 async function finalizeSession(reason = 'completed') {
@@ -384,6 +504,120 @@ function normalizeCommandName(command) {
     return command;
   }
   return command.replace(/^\/+/, '');
+}
+
+function normalizeWorkspaceTarget(value) {
+  if (!value) {
+    return '.';
+  }
+
+  const normalized = value.trim().replace(/^["']|["']$/g, '');
+  const lower = normalized.toLowerCase();
+  if (
+    [
+      'ini',
+      'di sini',
+      'disini',
+      'folder ini',
+      'repo ini',
+      'project ini',
+      'proyek ini',
+      'workspace ini',
+      'current folder',
+      'current directory',
+      'this folder',
+      'this repo',
+      'this project',
+      'this workspace',
+    ].includes(lower)
+  ) {
+    return '.';
+  }
+
+  return normalized
+    .replace(/^(file|folder|repo|project|proyek|workspace)\s+/i, '')
+    .trim();
+}
+
+function translateNaturalLanguageToCommand(commandLine) {
+  const inputText = commandLine.trim();
+  const simplifiedText = inputText
+    .replace(/^(?:tolong|please|coba|mohon|bisa\s+tolong|bisa)\s+/i, '')
+    .replace(/[?.!]+$/g, '')
+    .trim();
+  const lower = simplifiedText.toLowerCase();
+  if (!inputText) {
+    return null;
+  }
+
+  if (['menu', 'panduan', 'guide', 'mulai', 'start', 'contoh', 'examples', 'bantuan'].includes(lower)) {
+    return 'menu';
+  }
+
+  let match = simplifiedText.match(
+    /^(?:cek perubahan|lihat perubahan|perubahan git|status git|git status|apa yang berubah|what changed)(?:\s+(?:di|dalam|in)\s+(.+))?$/i,
+  );
+  if (match) {
+    return `changes ${normalizeWorkspaceTarget(match[1] ?? '.')}`;
+  }
+
+  match = simplifiedText.match(/^(?:review|audit|cek risiko|scan issue|scan issues|bedah risiko|periksa)\s+(.+)$/i);
+  if (match) {
+    return `review ${normalizeWorkspaceTarget(match[1])}`;
+  }
+
+  match = simplifiedText.match(/^(?:jelasin|jelaskan|explain|terangkan|uraikan)\s+(.+)$/i);
+  if (match) {
+    return `explain ${normalizeWorkspaceTarget(match[1])}`;
+  }
+
+  match = simplifiedText.match(/^(?:inspect|bedah|analisa|analisis|analyze|analyse|detail|profil)\s+(.+)$/i);
+  if (match) {
+    return `inspect ${normalizeWorkspaceTarget(match[1])}`;
+  }
+
+  match = simplifiedText.match(/^(?:buka|baca|lihat|tampilkan|show|read)\s+(.+)$/i);
+  if (match) {
+    return `read ${normalizeWorkspaceTarget(match[1])}`;
+  }
+
+  match = simplifiedText.match(/^(?:ringkas|summary|summarize)\s+(.+)$/i);
+  if (match) {
+    return `summary ${normalizeWorkspaceTarget(match[1])}`;
+  }
+
+  match = simplifiedText.match(/^(?:lihat isi|lihat folder|list|daftar isi|daftar|ls)\s+(.+)$/i);
+  if (match) {
+    return `ls ${normalizeWorkspaceTarget(match[1])}`;
+  }
+
+  match = simplifiedText.match(/^(?:tree|struktur|struktur folder|struktur repo)\s+(.+)$/i);
+  if (match) {
+    return `tree ${normalizeWorkspaceTarget(match[1])}`;
+  }
+
+  match = simplifiedText.match(/^(?:cari|search|grep|find)\s+["']?(.+?)["']?(?:\s+(?:di|dalam|in)\s+(.+))?$/i);
+  if (match) {
+    const query = match[1]?.trim();
+    const target = normalizeWorkspaceTarget(match[2] ?? '.');
+    if (query) {
+      return `grep "${query}" ${target}`;
+    }
+  }
+
+  match = simplifiedText.match(/^(?:jalanin|jalankan|run)\s+(.+)$/i);
+  if (match) {
+    return `run ${match[1].trim()}`;
+  }
+
+  match = simplifiedText.match(
+    /^(?:ganti|ubah|replace)\s+"([^"]+)"\s+(?:jadi|with)\s+"([^"]+)"\s+(?:di|in)\s+(.+)$/i,
+  );
+  if (match) {
+    return `patch ${normalizeWorkspaceTarget(match[3])} "${match[1]}" "${match[2]}"`;
+  }
+
+  return null;
 }
 
 function looksLikePathArg(value) {
@@ -594,6 +828,496 @@ async function readFileIfExists(filePath) {
   } catch {
     return null;
   }
+}
+
+function isProbablyTextPath(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (TEXT_FILE_EXTENSIONS.has(ext)) {
+    return true;
+  }
+
+  const base = path.basename(filePath).toLowerCase();
+  return (
+    base === 'readme' ||
+    base.startsWith('readme.') ||
+    base === 'license' ||
+    base === 'makefile' ||
+    base === '.gitignore'
+  );
+}
+
+function isReviewSourcePath(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return !['.md', '.txt', '.svg'].includes(ext);
+}
+
+async function readWorkspaceTextFile(filePath, maxBytes = 768 * 1024) {
+  const absolutePath = resolveInsideRoot(filePath);
+  const stat = await fs.stat(absolutePath);
+  if (stat.size > maxBytes) {
+    return {
+      skipped: 'too-large',
+      size: stat.size,
+      absolutePath,
+      workspacePath: toWorkspacePath(absolutePath),
+    };
+  }
+
+  try {
+    const content = await fs.readFile(absolutePath, 'utf8');
+    return {
+      content,
+      size: stat.size,
+      absolutePath,
+      workspacePath: toWorkspacePath(absolutePath),
+    };
+  } catch {
+    return {
+      skipped: 'binary-or-unreadable',
+      size: stat.size,
+      absolutePath,
+      workspacePath: toWorkspacePath(absolutePath),
+    };
+  }
+}
+
+function collectLineMatches(lines, regex, limit = 5) {
+  const matches = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (shouldIgnoreReviewLine(lines[index])) {
+      continue;
+    }
+    regex.lastIndex = 0;
+    if (!regex.test(lines[index])) {
+      continue;
+    }
+    matches.push({
+      line: index + 1,
+      snippet: lines[index].trim().slice(0, 180),
+    });
+    if (matches.length >= limit) {
+      break;
+    }
+  }
+  return matches;
+}
+
+function shouldIgnoreReviewLine(line) {
+  return /^\s*(key|label|severity|regex)\s*:/.test(line);
+}
+
+function formatLineMatches(matches) {
+  if (!matches || matches.length === 0) {
+    return '';
+  }
+  return matches.map(match => `${match.line}`).join(', ');
+}
+
+function collectDeclarationNames(lines, limit = 8) {
+  const declarations = [];
+  const patterns = [
+    /^\s*export\s+(?:default\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/,
+    /^\s*(?:async\s+)?function\s+([A-Za-z0-9_$]+)/,
+    /^\s*export\s+class\s+([A-Za-z0-9_$]+)/,
+    /^\s*class\s+([A-Za-z0-9_$]+)/,
+    /^\s*export\s+(?:const|let|var|type|interface|enum)\s+([A-Za-z0-9_$]+)/,
+    /^\s*(?:const|let|var|type|interface|enum)\s+([A-Za-z0-9_$]+)/,
+  ];
+
+  for (const line of lines) {
+    for (const pattern of patterns) {
+      const match = line.match(pattern);
+      if (!match) {
+        continue;
+      }
+      const name = match[1];
+      if (!declarations.includes(name)) {
+        declarations.push(name);
+      }
+      break;
+    }
+    if (declarations.length >= limit) {
+      break;
+    }
+  }
+
+  return declarations;
+}
+
+function analyzeTextContent(content) {
+  const lines = content.split('\n');
+  const imports = lines.filter(line => /^\s*import\b/.test(line)).length;
+  const exports = lines.filter(line => /^\s*export\b/.test(line)).length;
+  const functions = lines.filter(
+    line =>
+      /\bfunction\b/.test(line) ||
+      /^\s*(?:export\s+)?(?:const|let|var)\s+[A-Za-z0-9_$]+\s*=\s*(?:async\s*)?\(/.test(line),
+  ).length;
+  const classes = lines.filter(line => /\bclass\b/.test(line)).length;
+  const declarations = collectDeclarationNames(lines);
+
+  const signals = REVIEW_RULES.map(rule => {
+    const matches = collectLineMatches(lines, rule.regex);
+    return {
+      ...rule,
+      count: matches.length,
+      matches,
+    };
+  }).filter(signal => signal.count > 0);
+
+  const findings = signals.flatMap(signal =>
+    signal.matches.map(match => ({
+      severity: signal.severity,
+      label: signal.label,
+      line: match.line,
+      snippet: match.snippet,
+    })),
+  );
+
+  findings.sort((a, b) => getSeverityRank(b.severity) - getSeverityRank(a.severity) || a.line - b.line);
+
+  return {
+    lines: lines.length,
+    imports,
+    exports,
+    functions,
+    classes,
+    declarations,
+    signals,
+    findings,
+  };
+}
+
+async function detectGitRepoRoot() {
+  const result = await runProcess('git', ['-C', ROOT_DIR, 'rev-parse', '--show-toplevel']);
+  if (result.code !== 0) {
+    return null;
+  }
+  return result.stdout.trim() || null;
+}
+
+function toGitTargetSpec(repoRoot, targetPath) {
+  const relativePath = path.relative(repoRoot, targetPath);
+  if (!relativePath) {
+    return '.';
+  }
+  if (relativePath.startsWith('..')) {
+    return '.';
+  }
+  return relativePath;
+}
+
+function parseGitStatusShort(output) {
+  const entries = output
+    .split('\n')
+    .map(line => line.trimEnd())
+    .filter(Boolean)
+    .map(line => {
+      const status = line.slice(0, 2);
+      const file = line.slice(3).trim();
+      const staged = status[0] !== ' ' && status[0] !== '?';
+      const unstaged = status[1] !== ' ';
+      const untracked = status === '??';
+      return { status, file, staged, unstaged, untracked };
+    });
+
+  return {
+    entries,
+    stagedCount: entries.filter(entry => entry.staged).length,
+    unstagedCount: entries.filter(entry => entry.unstaged).length,
+    untrackedCount: entries.filter(entry => entry.untracked).length,
+  };
+}
+
+async function getGitStatusSummary(target = '.') {
+  const repoRoot = await detectGitRepoRoot();
+  if (!repoRoot) {
+    return null;
+  }
+
+  const absoluteTarget = resolveInsideRoot(target);
+  const targetSpec = toGitTargetSpec(repoRoot, absoluteTarget);
+  const statusResult = await runProcess('git', [
+    '-C',
+    repoRoot,
+    'status',
+    '--short',
+    '--untracked-files=all',
+    '--',
+    targetSpec,
+  ]);
+  const diffResult = await runProcess('git', ['-C', repoRoot, 'diff', '--stat', '--', targetSpec]);
+  const stagedDiffResult = await runProcess('git', [
+    '-C',
+    repoRoot,
+    'diff',
+    '--cached',
+    '--stat',
+    '--',
+    targetSpec,
+  ]);
+
+  return {
+    repoRoot,
+    targetSpec,
+    status: parseGitStatusShort(statusResult.stdout ?? ''),
+    diffStat: (diffResult.stdout ?? '').trim(),
+    stagedDiffStat: (stagedDiffResult.stdout ?? '').trim(),
+  };
+}
+
+async function collectDirectoryOverview(target = '.') {
+  const resolvedPath = resolveInsideRoot(target);
+  const dirCount = { value: 0 };
+  const fileCount = { value: 0 };
+  const totalBytes = { value: 0 };
+  const extensionCounts = new Map();
+  const largeFiles = [];
+  const interestingEntries = [];
+  const interestingNames = new Set([
+    'README.md',
+    'README',
+    'package.json',
+    'tsconfig.json',
+    'bunfig.toml',
+    'src',
+    'scripts',
+    'docs',
+    'tests',
+    'test',
+  ]);
+
+  await walkFiles(
+    resolvedPath,
+    async (fullPath, entry) => {
+      if (entry.isDirectory()) {
+        dirCount.value += 1;
+        if (interestingNames.has(entry.name) && interestingEntries.length < 10) {
+          interestingEntries.push(`${toWorkspacePath(fullPath)}/`);
+        }
+        return undefined;
+      }
+
+      fileCount.value += 1;
+      const stat = await fs.stat(fullPath);
+      totalBytes.value += stat.size;
+      const ext = path.extname(entry.name) || '(no extension)';
+      extensionCounts.set(ext, (extensionCounts.get(ext) ?? 0) + 1);
+      largeFiles.push({
+        path: toWorkspacePath(fullPath),
+        size: stat.size,
+      });
+      if (interestingNames.has(entry.name) && interestingEntries.length < 10) {
+        interestingEntries.push(toWorkspacePath(fullPath));
+      }
+      return undefined;
+    },
+    0,
+    8,
+  );
+
+  largeFiles.sort((a, b) => b.size - a.size);
+  const topExtensions = [...extensionCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6);
+
+  return {
+    resolvedPath,
+    directories: dirCount.value,
+    files: fileCount.value,
+    totalBytes: totalBytes.value,
+    topExtensions,
+    largestFiles: largeFiles.slice(0, 6),
+    interestingEntries,
+  };
+}
+
+async function collectReviewTargets(target = '.') {
+  const gitSummary = await getGitStatusSummary(target);
+  if (gitSummary && gitSummary.status.entries.length > 0) {
+    const changedCodeFiles = gitSummary.status.entries
+      .map(entry => entry.file.split(' -> ').at(-1)?.trim())
+      .filter(Boolean)
+      .filter(filePath => isProbablyTextPath(filePath))
+      .filter(filePath => isReviewSourcePath(filePath));
+    if (changedCodeFiles.length > 0) {
+      return changedCodeFiles.slice(0, 12);
+    }
+  }
+
+  const resolvedPath = resolveInsideRoot(target);
+  const stat = await fs.stat(resolvedPath);
+  if (stat.isFile()) {
+    return [toWorkspacePath(resolvedPath)];
+  }
+
+  const files = [];
+  await walkFiles(
+    resolvedPath,
+    async (fullPath, entry) => {
+      if (entry.isDirectory()) {
+        return shouldSkipEntry(fullPath, entry) ? 'skip' : undefined;
+      }
+
+      if (!isProbablyTextPath(fullPath)) {
+        return undefined;
+      }
+      if (!isReviewSourcePath(fullPath)) {
+        return undefined;
+      }
+
+      files.push(toWorkspacePath(fullPath));
+      if (files.length >= 20) {
+        return 'skip';
+      }
+      return undefined;
+    },
+    0,
+    6,
+  );
+
+  return files.slice(0, 12);
+}
+
+function summarizeDeclarations(names, limit = 6) {
+  if (!Array.isArray(names) || names.length === 0) {
+    return 'Tidak ada deklarasi utama yang kebaca cepat.';
+  }
+  const visible = names.slice(0, limit);
+  const suffix = names.length > limit ? `, dan ${names.length - limit} lain` : '';
+  return `${visible.join(', ')}${suffix}`;
+}
+
+function buildSignalSummary(signals, limit = 4) {
+  if (!Array.isArray(signals) || signals.length === 0) {
+    return [];
+  }
+
+  return signals
+    .slice()
+    .sort((a, b) => getSeverityRank(b.severity) - getSeverityRank(a.severity) || b.count - a.count)
+    .slice(0, limit)
+    .map(signal => `${signal.label} (${signal.count} baris${signal.matches?.length ? `: ${formatLineMatches(signal.matches)}` : ''})`);
+}
+
+function buildFindingSummary(findings, limit = 5) {
+  if (!Array.isArray(findings) || findings.length === 0) {
+    return [];
+  }
+
+  return findings.slice(0, limit).map(finding => {
+    const location = finding.file ? `${finding.file}:${finding.line}` : `line ${finding.line}`;
+    return `[${finding.severity}] ${location} ${finding.label}`;
+  });
+}
+
+async function buildExplainReport(target = '.') {
+  const resolvedPath = resolveInsideRoot(target);
+  const stat = await fs.stat(resolvedPath);
+
+  if (stat.isFile()) {
+    const workspacePath = toWorkspacePath(resolvedPath);
+    const textFile = await readWorkspaceTextFile(workspacePath);
+    const gitSummary = await getGitStatusSummary(workspacePath);
+    const lines = [`Mectov ngerti target ini sebagai file: ${workspacePath}`];
+    lines.push(`Ukuran ${formatBytes(stat.size)} dengan ekstensi ${path.extname(resolvedPath) || '(no extension)'}.`);
+
+    if (!textFile.content) {
+      lines.push(
+        textFile.skipped === 'too-large'
+          ? 'Isinya tidak dibaca penuh karena file terlalu besar untuk explain cepat.'
+          : 'Isinya tidak bisa dibaca sebagai teks, jadi explain dibatasi ke metadata saja.',
+      );
+      if (gitSummary?.status.entries.length) {
+        lines.push(`Status git: ${gitSummary.status.entries.map(entry => `${entry.status} ${entry.file}`).join(' | ')}.`);
+      }
+      return lines;
+    }
+
+    const analysis = analyzeTextContent(textFile.content);
+    lines.push(
+      `Secara bentuk, file ini punya ${analysis.lines} baris, ${analysis.imports} import, ${analysis.exports} export, ${analysis.functions} function-ish, dan ${analysis.classes} class.`,
+    );
+    lines.push(`Deklarasi awal yang kelihatan: ${summarizeDeclarations(analysis.declarations)}.`);
+
+    const signalSummary = buildSignalSummary(analysis.signals);
+    if (signalSummary.length > 0) {
+      lines.push(`Hotspot cepat: ${signalSummary.join(' | ')}.`);
+    } else {
+      lines.push('Belum ada hotspot cepat yang menonjol dari scan heuristik.');
+    }
+
+    if (gitSummary?.status.entries.length) {
+      lines.push(`Status git: ${gitSummary.status.entries.map(entry => `${entry.status} ${entry.file}`).join(' | ')}.`);
+    }
+
+    const findings = buildFindingSummary(analysis.findings, 4);
+    if (findings.length > 0) {
+      lines.push(`Temuan review paling dekat: ${findings.join(' | ')}.`);
+    }
+
+    return lines;
+  }
+
+  const overview = await collectDirectoryOverview(target);
+  const gitSummary = await getGitStatusSummary(target);
+  const reviewTargets = await collectReviewTargets(target);
+  const findings = [];
+
+  for (const filePath of reviewTargets.slice(0, 6)) {
+    const textFile = await readWorkspaceTextFile(filePath);
+    if (!textFile.content) {
+      continue;
+    }
+    const analysis = analyzeTextContent(textFile.content);
+    analysis.findings.forEach(finding => {
+      findings.push({
+        ...finding,
+        file: filePath,
+      });
+    });
+  }
+
+  findings.sort(
+    (a, b) =>
+      getSeverityRank(b.severity) - getSeverityRank(a.severity) ||
+      a.file.localeCompare(b.file) ||
+      a.line - b.line,
+  );
+
+  const lines = [`Mectov ngerti target ini sebagai folder: ${toWorkspacePath(resolvedPath)}`];
+  lines.push(
+    `Di area ini ada ${overview.directories} folder, ${overview.files} file, dengan total ukuran ${formatBytes(overview.totalBytes)}.`,
+  );
+
+  if (overview.topExtensions.length > 0) {
+    lines.push(
+      `Jenis file yang paling dominan: ${overview.topExtensions
+        .map(([ext, count]) => `${ext} (${count})`)
+        .join(', ')}.`,
+    );
+  }
+
+  if (overview.interestingEntries.length > 0) {
+    lines.push(`Lokasi penting yang langsung kelihatan: ${overview.interestingEntries.slice(0, 6).join(', ')}.`);
+  }
+
+  if (gitSummary?.status.entries.length) {
+    lines.push(
+      `Perubahan git di area ini: ${gitSummary.status.entries.length} file (${gitSummary.status.stagedCount} staged, ${gitSummary.status.unstagedCount} unstaged, ${gitSummary.status.untrackedCount} untracked).`,
+    );
+  } else if (gitSummary) {
+    lines.push('Working tree untuk area ini lagi bersih.');
+  }
+
+  const findingSummary = buildFindingSummary(findings, 5);
+  if (findingSummary.length > 0) {
+    lines.push(`Hotspot review tercepat: ${findingSummary.join(' | ')}.`);
+  } else {
+    lines.push('Belum ada hotspot review yang menonjol dari scan cepat area ini.');
+  }
+
+  return lines;
 }
 
 async function buildCommandPreview(commandLine) {
@@ -832,41 +1556,47 @@ async function buildCommandPreview(commandLine) {
 }
 
 async function cmdHelp() {
-  console.log(`Commands:
-  help
-  tools
-  adapter
-  agents
-  agent <name> <request>
-  agent-memory <name> [lines]
-  mode
-  status
-  plan <request>
-  ask <request>
-  think <request>
-  solve <request>
-  preview <request>
-  memory [lines]
-  recap [lines]
-  pwd
-  summary [path]
-  ls [path]
-  tree [path] [depth]
-  read <file> [start] [end]
-  find <text> [path]
-  grep <text> [path]
-  diff <file>
-  restore <file>
-  patch <file> <old> <new>
-  patch-block <file> <old> <new>
-  patch-lines <file> <start> <end> <new>
-  patch-anchor <file> <anchor> <old> <new>
-  write <file>
-  append <file>
-  replace <file>
-  run <shell command>
-  history [lines]
-  quit`);
+  console.log('Mectov paling enak dipakai dengan kalimat biasa.');
+  console.log('Contoh cepat:');
+  printQuickStartExamples();
+  console.log('');
+  console.log('Menu penting:');
+  console.log('- menu / panduan / contoh');
+  console.log('- status');
+  console.log('- explain [path]');
+  console.log('- tools');
+  console.log('- adapter');
+  console.log('- agents');
+  console.log('- inspect [path]');
+  console.log('- changes [path]');
+  console.log('- review [path]');
+  console.log('- read <file>');
+  console.log('- grep <text> [path]');
+  console.log('- summary [path]');
+  console.log('- solve <request>');
+  console.log('- preview <request>');
+  console.log('- quit');
+  console.log('');
+  console.log('Kalau mau versi teknis:');
+  console.log('- explain .');
+  console.log('- explain scripts/local-experiment-cli.mjs');
+  console.log('- inspect scripts/local-experiment-cli.mjs');
+  console.log('- changes .');
+  console.log('- review src/tools/AgentTool');
+  console.log('- read README.md 1 40');
+  console.log('- grep "agent" src/tools');
+  console.log('- summary src/tools/AgentTool');
+  console.log('- solve replace "foo" with "bar" in app.ts');
+}
+
+async function cmdGuide() {
+  await cmdHelp();
+  console.log('');
+  console.log('Tips pakai:');
+  console.log('- Kalau mau baca atau cari file, mode default sudah cukup.');
+  console.log('- Kalau mau edit file atau jalanin command shell, restart pakai --preset research-local.');
+  console.log('- Kalau mau cepat paham area tertentu, mulai dari: inspect src atau review src');
+  console.log('- Kalau bingung, mulai dari: jelasin folder ini');
 }
 
 async function cmdLs(target = '.') {
@@ -890,44 +1620,51 @@ async function cmdLs(target = '.') {
 }
 
 async function cmdMode() {
+  console.log(`Mode Mectov: ${getPromptPersona()}`);
   console.log(`Preset: ${presetName}`);
-  console.log(`Behavior: ${ACTIVE_PRESET.label}`);
+  console.log(`Perilaku: ${ACTIVE_PRESET.label}`);
   console.log(`Workspace root: ${ROOT_DIR}`);
-  console.log(`Available tools: ${TOOL_REGISTRY.tools.filter(tool => tool.enabled).length}/${TOOL_REGISTRY.tools.length}`);
+  console.log(`Tool aktif: ${TOOL_REGISTRY.tools.filter(tool => tool.enabled).length}/${TOOL_REGISTRY.tools.length}`);
 }
 
 async function cmdAdapter() {
-  console.log(`Adapter: ${formatModelAdapterLabel(MODEL_ADAPTER)}`);
-  console.log(`Mode: ${MODEL_ADAPTER.mode}`);
+  console.log(`Planner aktif: ${formatModelAdapterLabel(MODEL_ADAPTER)}`);
+  console.log(`Tipe adapter: ${MODEL_ADAPTER.mode}`);
   if (MODEL_ADAPTER.mode === 'module') {
     console.log(`Module: ${MODEL_ADAPTER.command}`);
-    console.log('Behavior: load a local planning module with heuristic fallback on failure.');
+    console.log('Perilaku: pakai module planner lokal, lalu fallback ke heuristik kalau gagal.');
   } else if (MODEL_ADAPTER.command) {
     console.log(`Command: ${MODEL_ADAPTER.command}`);
-    console.log('Behavior: external planner with automatic heuristic fallback on failure.');
+    console.log('Perilaku: planner eksternal dengan fallback heuristik otomatis kalau gagal.');
   } else {
-    console.log('Behavior: built-in heuristic planner.');
+    console.log('Perilaku: planner heuristik bawaan.');
   }
 }
 
 async function cmdStatus() {
-  console.log(`Status: ${buildStatusSummary()}`);
-  console.log(`Adapter: ${formatModelAdapterLabel(MODEL_ADAPTER)}`);
-  console.log(`Agents: ${SESSION_STATE.agentRunCount}`);
-  console.log(`Backups: ${SESSION_STATE.backupCount}`);
-  console.log(`Runs: ${SESSION_STATE.runCount}`);
-  console.log(`Last command: ${SESSION_STATE.lastCommand ?? '(none yet)'}`);
-  console.log(`Last workflow: ${SESSION_STATE.lastWorkflow ?? '(none yet)'}`);
-  console.log(`Elapsed: ${formatDuration(Date.now() - SESSION_STATE.startedAt.getTime())}`);
+  console.log(`Status ringkas: ${buildStatusSummary()}`);
+  console.log(`Mode: ${getPromptPersona()}`);
+  console.log(`Planner: ${formatModelAdapterLabel(MODEL_ADAPTER)}`);
+  console.log(`Agent run: ${SESSION_STATE.agentRunCount}`);
+  console.log(`Backup: ${SESSION_STATE.backupCount}`);
+  console.log(`Shell run: ${SESSION_STATE.runCount}`);
+  console.log(`Perintah terakhir: ${SESSION_STATE.lastCommand ?? '(belum ada)'}`);
+  console.log(`Workflow terakhir: ${SESSION_STATE.lastWorkflow ?? '(belum ada)'}`);
+  console.log(`Durasi sesi: ${formatDuration(Date.now() - SESSION_STATE.startedAt.getTime())}`);
+}
+
+async function cmdExplain(target = '.') {
+  const report = await buildExplainReport(target);
+  report.forEach(line => console.log(line));
 }
 
 async function cmdTools() {
-  console.log('Local tool registry:');
+  console.log('Tool lokal yang tersedia:');
   formatToolRegistry(TOOL_REGISTRY).forEach(line => console.log(`  ${line}`));
 }
 
 async function cmdAgents() {
-  console.log('Local agents:');
+  console.log('Karakter bantu yang tersedia:');
   listLocalAgents().forEach(agent => {
     console.log(`  ${agent.name.padEnd(16, ' ')} ${agent.description}`);
     console.log(`                   ${agent.style}`);
@@ -935,18 +1672,18 @@ async function cmdAgents() {
 }
 
 function printPlan(plan) {
-  console.log(`Request: ${plan.request}`);
+  console.log(`Mectov nangkep permintaanmu: ${plan.request}`);
 
   if (plan.selected) {
-    console.log(`Selected tool: ${plan.selected.tool}`);
-    console.log(`Suggested command: ${plan.selected.command}`);
-    console.log(`Reason: ${plan.selected.reason}`);
+    console.log(`Aksi yang paling cocok: ${plan.selected.tool}`);
+    console.log(`Perintah yang disiapkan: ${plan.selected.command}`);
+    console.log(`Alasan: ${plan.selected.reason}`);
   } else {
-    console.log('Selected tool: none');
+    console.log('Aksi yang paling cocok: belum ketemu');
   }
 
   if (plan.candidates.length > 0) {
-    console.log('Top candidates:');
+    console.log('Pilihan lain yang sempat dipertimbangkan:');
     plan.candidates.forEach(candidate => {
       const enabled = candidate.enabled ? 'enabled' : 'blocked';
       console.log(
@@ -955,28 +1692,28 @@ function printPlan(plan) {
     });
   }
 
-  plan.notes.forEach(note => console.log(`Note: ${note}`));
+  plan.notes.forEach(note => console.log(`Catatan: ${note}`));
 }
 
 function printWorkflow(workflow) {
-  console.log(`Request: ${workflow.request}`);
-  console.log(`Intent: ${workflow.intent}`);
-  console.log(`Summary: ${workflow.summary}`);
+  console.log(`Mectov lagi nyusun langkah untuk: ${workflow.request}`);
+  console.log(`Arah kerja: ${workflow.intent}`);
+  console.log(`Ringkasan: ${workflow.summary}`);
   if (workflow.planner) {
     console.log(`Planner: ${workflow.planner}`);
   }
   if (workflow.confidence !== undefined && workflow.confidence !== null) {
-    console.log(`Confidence: ${workflow.confidence}`);
-    console.log(`Confidence policy: ${describeConfidencePolicy(workflow.confidence)}`);
+    console.log(`Tingkat yakin: ${workflow.confidence}`);
+    console.log(`Panduan eksekusi: ${describeConfidencePolicy(workflow.confidence)}`);
   }
   if (Array.isArray(workflow.rationale) && workflow.rationale.length > 0) {
-    console.log('Rationale:');
+    console.log('Kenapa Mectov milih alur ini:');
     workflow.rationale.forEach((item, index) => {
       console.log(`  ${index + 1}. ${item}`);
     });
   }
   if (Array.isArray(workflow.phases) && workflow.phases.length > 0) {
-    console.log('Phases:');
+    console.log('Fase kerja:');
     workflow.phases.forEach((phase, index) => {
       const stepRefs =
         Array.isArray(phase.steps) && phase.steps.length > 0
@@ -990,9 +1727,9 @@ function printWorkflow(workflow) {
   }
 
   if (workflow.steps.length === 0) {
-    console.log('Steps: none');
+    console.log('Langkah: belum ada yang bisa dijalankan');
   } else {
-    console.log('Steps:');
+    console.log('Langkah yang disiapkan:');
     workflow.steps.forEach((step, index) => {
       const status = step.enabled ? 'enabled' : 'blocked';
       const mode = step.readOnly ? 'read-only' : 'mutating';
@@ -1001,11 +1738,11 @@ function printWorkflow(workflow) {
     });
   }
 
-  console.log(`Auto-runnable: ${workflow.autoRunnable ? 'yes' : 'no'}`);
+  console.log(`Bisa jalan otomatis: ${workflow.autoRunnable ? 'ya' : 'tidak'}`);
   if (workflow.requiresApproval) {
-    console.log('Approval checkpoints: required for one or more steps');
+    console.log('Checkpoint izin: dibutuhkan untuk satu atau lebih langkah');
   }
-  workflow.notes.forEach(note => console.log(`Note: ${note}`));
+  workflow.notes.forEach(note => console.log(`Catatan: ${note}`));
 }
 
 async function executeWorkflow(workflow, prefixLabel = 'Running') {
@@ -1326,8 +2063,8 @@ async function cmdAgent(agentName, requestText) {
     workflow.steps.every(step => step.readOnly && step.enabled);
   workflow.requiresApproval = workflow.steps.some(step => !step.readOnly);
 
-  console.log(`Agent: ${agent.name}`);
-  console.log(`Style: ${agent.style}`);
+  console.log(`Mectov manggil agent: ${agent.name}`);
+  console.log(`Gaya bantu: ${agent.style}`);
   printWorkflow(workflow);
   await rememberWorkflow(`agent:${agentName}`, workflow);
   await rememberAgentWorkflow(agentName, workflow);
@@ -1392,6 +2129,195 @@ async function cmdSummary(target = '.') {
     topExtensions.forEach(([ext, count]) => {
       console.log(`  ${ext}: ${count}`);
     });
+  }
+}
+
+async function cmdInspect(target = '.') {
+  const resolvedPath = resolveInsideRoot(target);
+  const stat = await fs.stat(resolvedPath);
+
+  if (stat.isFile()) {
+    const workspacePath = toWorkspacePath(resolvedPath);
+    const textFile = await readWorkspaceTextFile(workspacePath);
+    console.log(`Inspeksi target: ${workspacePath}`);
+    console.log('Jenis: file');
+    console.log(`Ukuran: ${formatBytes(stat.size)}`);
+    console.log(`Ekstensi: ${path.extname(resolvedPath) || '(no extension)'}`);
+
+    if (!textFile.content) {
+      console.log(
+        textFile.skipped === 'too-large'
+          ? 'Isi file tidak dibaca penuh karena terlalu besar untuk inspeksi cepat.'
+          : 'Isi file tidak bisa dibaca sebagai teks.',
+      );
+      return;
+    }
+
+    const analysis = analyzeTextContent(textFile.content);
+    console.log(`Baris: ${analysis.lines}`);
+    console.log('Struktur cepat:');
+    console.log(`  import: ${analysis.imports}`);
+    console.log(`  export: ${analysis.exports}`);
+    console.log(`  function-ish: ${analysis.functions}`);
+    console.log(`  class: ${analysis.classes}`);
+    if (analysis.declarations.length > 0) {
+      console.log(`Deklarasi awal: ${analysis.declarations.join(', ')}`);
+    }
+
+    if (analysis.signals.length > 0) {
+      console.log('Sinyal penting:');
+      analysis.signals.forEach(signal => {
+        console.log(
+          `  - ${signal.label}: ${signal.count} baris (${formatLineMatches(signal.matches)})`,
+        );
+      });
+    } else {
+      console.log('Sinyal penting: tidak ada marker cepat yang menonjol.');
+    }
+    return;
+  }
+
+  const overview = await collectDirectoryOverview(target);
+  console.log(`Inspeksi target: ${toWorkspacePath(resolvedPath)}`);
+  console.log('Jenis: folder');
+  console.log(`Directory: ${overview.directories}`);
+  console.log(`File: ${overview.files}`);
+  console.log(`Ukuran total: ${formatBytes(overview.totalBytes)}`);
+
+  if (overview.topExtensions.length > 0) {
+    console.log('Ekstensi dominan:');
+    overview.topExtensions.forEach(([ext, count]) => {
+      console.log(`  - ${ext}: ${count}`);
+    });
+  }
+
+  if (overview.largestFiles.length > 0) {
+    console.log('File terbesar di area ini:');
+    overview.largestFiles.forEach(file => {
+      console.log(`  - ${file.path} (${formatBytes(file.size)})`);
+    });
+  }
+
+  if (overview.interestingEntries.length > 0) {
+    console.log('Lokasi penting yang ketemu:');
+    overview.interestingEntries.forEach(entry => console.log(`  - ${entry}`));
+  }
+}
+
+async function cmdChanges(target = '.') {
+  const gitSummary = await getGitStatusSummary(target);
+  if (!gitSummary) {
+    console.log('Area ini belum terdeteksi sebagai repo git.');
+    return;
+  }
+
+  console.log(`Repo git: ${gitSummary.repoRoot}`);
+  console.log(`Target: ${gitSummary.targetSpec}`);
+  if (gitSummary.status.entries.length === 0) {
+    console.log('Working tree untuk area ini lagi bersih.');
+    return;
+  }
+
+  console.log(
+    `Ringkasan perubahan: ${gitSummary.status.entries.length} file, ${gitSummary.status.stagedCount} staged, ${gitSummary.status.unstagedCount} unstaged, ${gitSummary.status.untrackedCount} untracked.`,
+  );
+  console.log('File yang berubah:');
+  gitSummary.status.entries.slice(0, 30).forEach(entry => {
+    console.log(`  - ${entry.status} ${entry.file}`);
+  });
+  if (gitSummary.status.entries.length > 30) {
+    console.log(`  ...dan ${gitSummary.status.entries.length - 30} file lain`);
+  }
+
+  if (gitSummary.diffStat) {
+    console.log('Diff stat (unstaged):');
+    gitSummary.diffStat.split('\n').forEach(line => console.log(`  ${line}`));
+  }
+  if (gitSummary.stagedDiffStat) {
+    console.log('Diff stat (staged):');
+    gitSummary.stagedDiffStat.split('\n').forEach(line => console.log(`  ${line}`));
+  }
+}
+
+async function cmdReview(target = '.') {
+  const resolvedPath = resolveInsideRoot(target);
+  const stat = await fs.stat(resolvedPath);
+
+  if (stat.isFile()) {
+    const workspacePath = toWorkspacePath(resolvedPath);
+    const textFile = await readWorkspaceTextFile(workspacePath);
+    console.log(`Review cepat: ${workspacePath}`);
+    if (!textFile.content) {
+      console.log('File ini tidak bisa direview cepat sebagai teks.');
+      return;
+    }
+
+    const analysis = analyzeTextContent(textFile.content);
+    const gitSummary = await getGitStatusSummary(workspacePath);
+    if (gitSummary?.status.entries.length) {
+      console.log(
+        `Status git: ${gitSummary.status.entries.map(entry => `${entry.status} ${entry.file}`).join(' | ')}`,
+      );
+    }
+
+    if (analysis.findings.length === 0) {
+      console.log('Tidak ada marker risiko cepat yang mencolok di file ini.');
+    } else {
+      console.log('Temuan review cepat:');
+      analysis.findings.slice(0, 16).forEach(finding => {
+        console.log(
+          `  - [${finding.severity}] line ${finding.line}: ${finding.label} -> ${finding.snippet}`,
+        );
+      });
+      if (analysis.findings.length > 16) {
+        console.log(`  ...dan ${analysis.findings.length - 16} temuan lain`);
+      }
+    }
+    return;
+  }
+
+  const targets = await collectReviewTargets(target);
+  if (targets.length === 0) {
+    console.log('Belum ada file yang layak direview cepat di area ini.');
+    return;
+  }
+
+  const findings = [];
+  for (const filePath of targets) {
+    const textFile = await readWorkspaceTextFile(filePath);
+    if (!textFile.content) {
+      continue;
+    }
+    const analysis = analyzeTextContent(textFile.content);
+    analysis.findings.forEach(finding => {
+      findings.push({
+        ...finding,
+        file: filePath,
+      });
+    });
+  }
+
+  findings.sort(
+    (a, b) =>
+      getSeverityRank(b.severity) - getSeverityRank(a.severity) ||
+      a.file.localeCompare(b.file) ||
+      a.line - b.line,
+  );
+
+  console.log(`Review cepat area: ${toWorkspacePath(resolvedPath)}`);
+  console.log(`File yang discan: ${targets.length}`);
+  if (findings.length === 0) {
+    console.log('Belum ada marker risiko cepat yang menonjol di area ini.');
+    return;
+  }
+
+  findings.slice(0, 20).forEach(finding => {
+    console.log(
+      `  - [${finding.severity}] ${finding.file}:${finding.line} ${finding.label} -> ${finding.snippet}`,
+    );
+  });
+  if (findings.length > 20) {
+    console.log(`  ...dan ${findings.length - 20} temuan lain`);
   }
 }
 
@@ -1839,7 +2765,17 @@ async function handleCommand(commandLine, isNested = false) {
     case undefined:
       return false;
     case 'help':
+    case 'bantuan':
       await cmdHelp();
+      return false;
+    case 'menu':
+    case 'panduan':
+    case 'guide':
+    case 'mulai':
+    case 'start':
+    case 'contoh':
+    case 'examples':
+      await cmdGuide();
       return false;
     case 'tools':
       await cmdTools();
@@ -1861,6 +2797,18 @@ async function handleCommand(commandLine, isNested = false) {
       return false;
     case 'status':
       await cmdStatus();
+      return false;
+    case 'explain':
+      await cmdExplain(rest[0]);
+      return false;
+    case 'inspect':
+      await cmdInspect(rest[0]);
+      return false;
+    case 'changes':
+      await cmdChanges(rest[0]);
+      return false;
+    case 'review':
+      await cmdReview(rest[0]);
       return false;
     case 'plan':
       await cmdPlan(rest.join(' '));
@@ -1942,8 +2890,19 @@ async function handleCommand(commandLine, isNested = false) {
       return true;
     default:
       if (!isNested) {
-        console.log(`Unknown command: ${command}`);
-        await cmdHelp();
+        const translatedCommand = translateNaturalLanguageToCommand(commandLine);
+        if (translatedCommand) {
+          console.log(`Mectov nangkepnya: ${translatedCommand}`);
+          await handleCommand(translatedCommand, true);
+          return false;
+        }
+        if (commandLine.trim().includes(' ')) {
+          console.log('Mectov coba proses ini sebagai permintaan biasa.');
+          await cmdAsk(commandLine.trim());
+          return false;
+        }
+        console.log(`Perintah belum dikenali: ${command}`);
+        console.log('Ketik "menu" buat lihat cara pakai yang cepat.');
       } else {
         throw new Error(`Unknown routed command: ${command}`);
       }
