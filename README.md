@@ -1,320 +1,322 @@
-# Claude Code Source Snapshot for Security Research
-
-> This repository mirrors a **publicly exposed Claude Code source snapshot** that became accessible on **March 31, 2026** through a source map exposure in the npm distribution. It is maintained for **educational, defensive security research, and software supply-chain analysis**.
-
----
-
-## Research Context
-
-This repository is maintained by a **university student** studying:
-
-- software supply-chain exposure and build artifact leaks
-- secure software engineering practices
-- agentic developer tooling architecture
-- defensive analysis of real-world CLI systems
-
-This archive is intended to support:
-
-- educational study
-- security research practice
-- architecture review
-- discussion of packaging and release-process failures
-
-It does **not** claim ownership of the original code, and it should not be interpreted as an official Anthropic repository.
-
----
-
-## How the Public Snapshot Became Accessible
-
-[Chaofan Shou (@Fried_rice)](https://x.com/Fried_rice) publicly noted that Claude Code source material was reachable through a `.map` file exposed in the npm package:
-
-> **"Claude code source code has been leaked via a map file in their npm registry!"**
->
-> — [@Fried_rice, March 31, 2026](https://x.com/Fried_rice/status/2038894956459290963)
-
-The published source map referenced unobfuscated TypeScript sources hosted in Anthropic's R2 storage bucket, which made the `src/` snapshot publicly downloadable.
-
----
-
-## Repository Scope
-
-Claude Code is Anthropic's CLI for interacting with Claude from the terminal to perform software engineering tasks such as editing files, running commands, searching codebases, and coordinating workflows.
-
-This repository contains a mirrored `src/` snapshot for research and analysis.
-
-- **Public exposure identified on**: 2026-03-31
-- **Language**: TypeScript
-- **Runtime**: Bun
-- **Terminal UI**: React + [Ink](https://github.com/vadimdemedes/ink)
-- **Scale**: ~1,900 files, 512,000+ lines of code
-
----
-
-## Directory Structure
-
-```text
-src/
-├── main.tsx                 # Entrypoint orchestration (Commander.js-based CLI path)
-├── commands.ts              # Command registry
-├── tools.ts                 # Tool registry
-├── Tool.ts                  # Tool type definitions
-├── QueryEngine.ts           # LLM query engine
-├── context.ts               # System/user context collection
-├── cost-tracker.ts          # Token cost tracking
-│
-├── commands/                # Slash command implementations (~50)
-├── tools/                   # Agent tool implementations (~40)
-├── components/              # Ink UI components (~140)
-├── hooks/                   # React hooks
-├── services/                # External service integrations
-├── screens/                 # Full-screen UIs (Doctor, REPL, Resume)
-├── types/                   # TypeScript type definitions
-├── utils/                   # Utility functions
-│
-├── bridge/                  # IDE and remote-control bridge
-├── coordinator/             # Multi-agent coordinator
-├── plugins/                 # Plugin system
-├── skills/                  # Skill system
-├── keybindings/             # Keybinding configuration
-├── vim/                     # Vim mode
-├── voice/                   # Voice input
-├── remote/                  # Remote sessions
-├── server/                  # Server mode
-├── memdir/                  # Persistent memory directory
-├── tasks/                   # Task management
-├── state/                   # State management
-├── migrations/              # Config migrations
-├── schemas/                 # Config schemas (Zod)
-├── entrypoints/             # Initialization logic
-├── ink/                     # Ink renderer wrapper
-├── buddy/                   # Companion sprite
-├── native-ts/               # Native TypeScript utilities
-├── outputStyles/            # Output styling
-├── query/                   # Query pipeline
-└── upstreamproxy/           # Proxy configuration
-```
-
----
-
-## Architecture Summary
-
-### 1. Tool System (`src/tools/`)
-
-Every tool Claude Code can invoke is implemented as a self-contained module. Each tool defines its input schema, permission model, and execution logic.
-
-| Tool | Description |
-|---|---|
-| `BashTool` | Shell command execution |
-| `FileReadTool` | File reading (images, PDFs, notebooks) |
-| `FileWriteTool` | File creation / overwrite |
-| `FileEditTool` | Partial file modification (string replacement) |
-| `GlobTool` | File pattern matching search |
-| `GrepTool` | ripgrep-based content search |
-| `WebFetchTool` | Fetch URL content |
-| `WebSearchTool` | Web search |
-| `AgentTool` | Sub-agent spawning |
-| `SkillTool` | Skill execution |
-| `MCPTool` | MCP server tool invocation |
-| `LSPTool` | Language Server Protocol integration |
-| `NotebookEditTool` | Jupyter notebook editing |
-| `TaskCreateTool` / `TaskUpdateTool` | Task creation and management |
-| `SendMessageTool` | Inter-agent messaging |
-| `TeamCreateTool` / `TeamDeleteTool` | Team agent management |
-| `EnterPlanModeTool` / `ExitPlanModeTool` | Plan mode toggle |
-| `EnterWorktreeTool` / `ExitWorktreeTool` | Git worktree isolation |
-| `ToolSearchTool` | Deferred tool discovery |
-| `CronCreateTool` | Scheduled trigger creation |
-| `RemoteTriggerTool` | Remote trigger |
-| `SleepTool` | Proactive mode wait |
-| `SyntheticOutputTool` | Structured output generation |
-
-### 2. Command System (`src/commands/`)
-
-User-facing slash commands invoked with `/` prefix.
-
-| Command | Description |
-|---|---|
-| `/commit` | Create a git commit |
-| `/review` | Code review |
-| `/compact` | Context compression |
-| `/mcp` | MCP server management |
-| `/config` | Settings management |
-| `/doctor` | Environment diagnostics |
-| `/login` / `/logout` | Authentication |
-| `/memory` | Persistent memory management |
-| `/skills` | Skill management |
-| `/tasks` | Task management |
-| `/vim` | Vim mode toggle |
-| `/diff` | View changes |
-| `/cost` | Check usage cost |
-| `/theme` | Change theme |
-| `/context` | Context visualization |
-| `/pr_comments` | View PR comments |
-| `/resume` | Restore previous session |
-| `/share` | Share session |
-| `/desktop` | Desktop app handoff |
-| `/mobile` | Mobile app handoff |
-
-### 3. Service Layer (`src/services/`)
-
-| Service | Description |
-|---|---|
-| `api/` | Anthropic API client, file API, bootstrap |
-| `mcp/` | Model Context Protocol server connection and management |
-| `oauth/` | OAuth 2.0 authentication flow |
-| `lsp/` | Language Server Protocol manager |
-| `analytics/` | GrowthBook-based feature flags and analytics |
-| `plugins/` | Plugin loader |
-| `compact/` | Conversation context compression |
-| `policyLimits/` | Organization policy limits |
-| `remoteManagedSettings/` | Remote managed settings |
-| `extractMemories/` | Automatic memory extraction |
-| `tokenEstimation.ts` | Token count estimation |
-| `teamMemorySync/` | Team memory synchronization |
+# Mectov CLI
 
-### 4. Bridge System (`src/bridge/`)
+Local-first CLI for reading, searching, reviewing, and experimenting on a codebase, built on top of a public Claude Code source snapshot used here for research and tooling exploration.
 
-A bidirectional communication layer connecting IDE extensions (VS Code, JetBrains) with the Claude Code CLI.
+> This repository is not an official Anthropic repository. The original Claude Code source remains Anthropic's property. This repo is a research archive plus a local experimental CLI layer called `Mectov`.
 
-- `bridgeMain.ts` — Bridge main loop
-- `bridgeMessaging.ts` — Message protocol
-- `bridgePermissionCallbacks.ts` — Permission callbacks
-- `replBridge.ts` — REPL session bridge
-- `jwtUtils.ts` — JWT-based authentication
-- `sessionRunner.ts` — Session execution management
+## What This Repo Is
 
-### 5. Permission System (`src/hooks/toolPermission/`)
+This project currently has two layers:
 
-Checks permissions on every tool invocation. Either prompts the user for approval/denial or automatically resolves based on the configured permission mode (`default`, `plan`, `bypassPermissions`, `auto`, etc.).
+1. `src/`
+   A mirrored TypeScript source snapshot of Claude Code, kept here for architecture study, defensive security research, and agent-tooling analysis.
 
-### 6. Feature Flags
+2. `mectov` + `scripts/local-experiment-cli.mjs`
+   A standalone local CLI bootstrap that makes the repo directly usable without depending on Anthropic auth, internal services, or the original build pipeline.
 
-Dead code elimination via Bun's `bun:bundle` feature flags:
+If you open this repo and want something you can actually run today, `Mectov CLI` is the part you want.
 
-```typescript
-import { feature } from 'bun:bundle'
+## Why Mectov Exists
 
-// Inactive code is completely stripped at build time
-const voiceCommand = feature('VOICE_MODE')
-  ? require('./commands/voice/index.js').default
-  : null
-```
+The original snapshot is large and tightly coupled to:
 
-Notable flags: `PROACTIVE`, `KAIROS`, `BRIDGE_MODE`, `DAEMON`, `VOICE_MODE`, `AGENT_TRIGGERS`, `MONITOR_TOOL`
+- Bun-specific build paths
+- feature flags
+- auth and account flows
+- analytics and remote settings
+- internal service integrations
+- IDE bridge and remote session plumbing
 
----
+That makes the raw snapshot interesting to study, but awkward to use as a local tool out of the box.
 
-## Key Files in Detail
+`Mectov` solves that by giving this repo a practical local runtime with:
 
-### `QueryEngine.ts` (~46K lines)
+- plain-language commands
+- repo-safe reads and search
+- git-aware change inspection
+- lightweight code review
+- guarded file editing
+- approval-gated shell execution
 
-The core engine for LLM API calls. Handles streaming responses, tool-call loops, thinking mode, retry logic, and token counting.
+## Highlights
 
-### `Tool.ts` (~29K lines)
+- Local-first CLI with no Anthropic login required
+- Natural language routing like `jelasin folder ini` and `cek perubahan project ini`
+- Read-only safe mode and edit-enabled research mode
+- File and folder explanation with concise summaries
+- Quick inspection and lightweight risk review
+- Git working tree summaries for the current repo area
+- Workflow planning with step-by-step execution
+- Named local agents such as `explorer`, `reviewer`, and `maintainer`
+- File backups, diff, restore, and patch-based editing
 
-Defines base types and interfaces for all tools — input schemas, permission models, and progress state types.
+## Quick Start
 
-### `commands.ts` (~25K lines)
-
-Manages registration and execution of all slash commands. Uses conditional imports to load different command sets per environment.
-
-### `main.tsx`
-
-Commander.js-based CLI parser and React/Ink renderer initialization. At startup, it overlaps MDM settings, keychain prefetch, and GrowthBook initialization for faster boot.
-
----
-
-## Tech Stack
-
-| Category | Technology |
-|---|---|
-| Runtime | [Bun](https://bun.sh) |
-| Language | TypeScript (strict) |
-| Terminal UI | [React](https://react.dev) + [Ink](https://github.com/vadimdemedes/ink) |
-| CLI Parsing | [Commander.js](https://github.com/tj/commander.js) (extra-typings) |
-| Schema Validation | [Zod v4](https://zod.dev) |
-| Code Search | [ripgrep](https://github.com/BurntSushi/ripgrep) |
-| Protocols | [MCP SDK](https://modelcontextprotocol.io), LSP |
-| API | [Anthropic SDK](https://docs.anthropic.com) |
-| Telemetry | OpenTelemetry + gRPC |
-| Feature Flags | GrowthBook |
-| Auth | OAuth 2.0, JWT, macOS Keychain |
-
----
-
-## Notable Design Patterns
-
-### Parallel Prefetch
-
-Startup time is optimized by prefetching MDM settings, keychain reads, and API preconnect in parallel before heavy module evaluation begins.
-
-```typescript
-// main.tsx — fired as side-effects before other imports
-startMdmRawRead()
-startKeychainPrefetch()
-```
-
-### Lazy Loading
-
-Heavy modules (OpenTelemetry, gRPC, analytics, and some feature-gated subsystems) are deferred via dynamic `import()` until actually needed.
-
-### Agent Swarms
-
-Sub-agents are spawned via `AgentTool`, with `coordinator/` handling multi-agent orchestration. `TeamCreateTool` enables team-level parallel work.
-
-### Skill System
-
-Reusable workflows defined in `skills/` are executed through `SkillTool`. Users can add custom skills.
-
-### Plugin Architecture
-
-Built-in and third-party plugins are loaded through the `plugins/` subsystem.
-
----
-
-## Research / Ownership Disclaimer
-
-- This repository is an **educational and defensive security research archive** maintained by a university student.
-- It exists to study source exposure, packaging failures, and the architecture of modern agentic CLI systems.
-- The original Claude Code source remains the property of **Anthropic**.
-- This repository is **not affiliated with, endorsed by, or maintained by Anthropic**.
-
----
-
-## Mectov CLI Bootstrap
-
-This snapshot currently does not include the original project metadata needed to build the full CLI directly. To make the repo immediately useful for local experimentation, a standalone bootstrap CLI is included:
+Run from the repo root:
 
 ```bash
 node scripts/local-experiment-cli.mjs
 ```
 
-Or, with the repo-local launcher:
+Or use the repo launcher:
 
 ```bash
 ./mectov
 ```
 
-That local CLI is intentionally simple and self-contained:
+To install `mectov` as a user command:
 
-- workspace-scoped file browsing and reads
-- text search across the repo
-- safe-local and research-local presets
-- a local tool registry with lightweight natural-language routing
-- a simple workflow model that can plan and auto-run read-only investigations
-- approval-gated mutating workflows for file edits and shell actions
-- patch previews before mutating workflow steps
-- exact-match patch edits as the safer default workflow primitive
-- escaped multi-line block patching for more precise edits
-- exact line-range patching for context-aware edits
-- unique-anchor patching for edits inside repeated code patterns
-- a session header, prompt statusline, and compact recap flow for longer terminal sessions
-- an optional local module-based planner adapter with heuristic fallback
-- richer workflow metadata from adapters, including confidence, rationale, and grouped phases
-- named local agents with separate memory logs
-- automatic file backups plus diff/restore flows
-- simple write, append, and replace flows
-- shell command execution with confirmation
-- per-session logs under `.local-experiment/sessions/`
+```bash
+bash scripts/install-mectov.sh
+```
 
-See [docs/local-experiment-cli.md](docs/local-experiment-cli.md) for usage details and the staged roadmap for turning this snapshot into a more capable local-only research CLI.
+## First Things To Try
+
+After `mectov` opens, you can type normal language instead of memorizing commands.
+
+Examples:
+
+```text
+jelasin folder ini
+buka README.md
+cari "agent" di src/tools
+cek perubahan project ini
+review scripts/local-experiment-cli.mjs
+inspect src/tools/AgentTool
+```
+
+If you want the built-in guide:
+
+```text
+menu
+```
+
+## Modes
+
+### `safe-local`
+
+Read/search only.
+
+```bash
+./mectov --preset safe-local
+```
+
+Best for:
+
+- exploring a repo
+- reading files
+- searching symbols
+- reviewing changes
+- understanding structure
+
+### `research-local`
+
+Read/search/edit/run with confirmations.
+
+```bash
+./mectov --preset research-local
+```
+
+Best for:
+
+- patching files
+- appending or writing content
+- restoring backups
+- running shell commands with approval
+
+## Most Useful Commands
+
+### Understand
+
+- `explain [path]`
+- `summary [path]`
+- `inspect [path]`
+- `tree [path] [depth]`
+- `read <file> [start] [end]`
+
+### Search
+
+- `find <text> [path]`
+- `grep <text> [path]`
+
+### Review
+
+- `changes [path]`
+- `review [path]`
+- `diff <file>`
+
+### Workflow
+
+- `plan <request>`
+- `ask <request>`
+- `think <request>`
+- `solve <request>`
+- `preview <request>`
+
+### Editing
+
+- `patch <file> <old> <new>`
+- `patch-block <file> <old> <new>`
+- `patch-lines <file> <start> <end> <new>`
+- `patch-anchor <file> <anchor> <old> <new>`
+- `write <file> [text]`
+- `append <file> [text]`
+- `replace <file> [old] [new]`
+- `restore <file>`
+
+### Session
+
+- `status`
+- `recap [lines]`
+- `memory [lines]`
+- `agents`
+- `agent <name> <request>`
+- `agent-memory <name> [lines]`
+
+## What `explain`, `inspect`, `changes`, and `review` Do
+
+### `explain`
+
+Gives a human-readable summary of a file or folder using:
+
+- file/folder structure
+- top code signals
+- current git context
+- quick review hotspots
+
+Example:
+
+```text
+jelasin scripts/local-agents.mjs
+```
+
+### `inspect`
+
+Shows richer metadata and heuristics such as:
+
+- line count
+- import/export counts
+- declaration names
+- quick signal markers
+
+Example:
+
+```text
+inspect scripts/local-experiment-cli.mjs
+```
+
+### `changes`
+
+Summarizes git working tree state for a target area:
+
+- changed files
+- staged / unstaged / untracked counts
+- diff stat
+
+Example:
+
+```text
+cek perubahan project ini
+```
+
+### `review`
+
+Runs a lightweight heuristic review for quick hotspots, including markers like:
+
+- child process execution
+- `shell: true`
+- filesystem mutation
+- `process.env`
+- `TODO` / `FIXME` / `HACK`
+
+Example:
+
+```text
+review .
+```
+
+## Local Agents
+
+`Mectov` includes lightweight local personas that bias workflow planning:
+
+- `generalist`
+- `explorer`
+- `reviewer`
+- `maintainer`
+- `editor`
+- `statusline-helper`
+
+Example:
+
+```text
+agent maintainer inspect scripts/local-experiment-cli.mjs
+```
+
+## Editing Model
+
+Mutating actions are intentionally guarded.
+
+Safety features include:
+
+- workspace-scoped file access
+- automatic backups under `.local-experiment/backups/`
+- preview before mutating workflow steps
+- exact-match patching as the preferred edit primitive
+- approval checkpoints before writes and shell execution
+
+For scripted runs where you explicitly want approvals skipped:
+
+```bash
+./mectov --preset research-local --yes
+```
+
+## Repo Layout
+
+```text
+.
+├── mectov                          # repo-local launcher
+├── scripts/
+│   ├── local-experiment-cli.mjs    # main Mectov CLI entrypoint
+│   ├── local-tool-registry.mjs     # tool definitions and routing hints
+│   ├── local-model-adapter.mjs     # heuristic workflow builder
+│   ├── local-model-runtime.mjs     # adapter runtime and fallback logic
+│   ├── local-agents.mjs            # local agent personas
+│   └── install-mectov.sh           # user command installer
+├── docs/
+│   └── local-experiment-cli.md     # detailed Mectov usage guide
+└── src/                            # Claude Code source snapshot for research
+```
+
+## About The Source Snapshot
+
+The `src/` directory is kept for research and architecture study.
+
+High-level characteristics:
+
+- language: TypeScript
+- runtime: Bun
+- UI: React + Ink
+- includes command, tool, bridge, service, plugin, and agent subsystems
+
+Interesting top-level areas inside `src/`:
+
+- `src/main.tsx`
+- `src/commands.ts`
+- `src/tools.ts`
+- `src/QueryEngine.ts`
+- `src/tools/`
+- `src/commands/`
+- `src/components/`
+- `src/services/`
+- `src/bridge/`
+
+## Documentation
+
+- Detailed CLI guide: [docs/local-experiment-cli.md](docs/local-experiment-cli.md)
+
+## Research And Ownership Note
+
+- This repository is maintained for educational and defensive security research.
+- It studies source exposure, packaging failures, and agentic CLI architecture.
+- It is not affiliated with or endorsed by Anthropic.
+- The mirrored Claude Code source snapshot is included for analysis, not ownership claims.
